@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dvojiške kartice</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        .container {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .card {
+            width: 140px;
+            height: 220px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            border: 2px solid black;
+            cursor: pointer;
+            user-select: none;
+            background-color: white;
+            color: black;
+            padding: 10px;
+            position: relative;
+        }
+        .active {
+            background-color: #fff9c4;
+        }
+        .dots {
+            display: grid;
+            justify-content: center;
+            align-content: center;
+            height: 100%;
+        }
+        .dots.spacing-large {
+            gap: 4px;
+        }
+        .dots.spacing-small {
+            gap: 1px;
+        }
+        .dot {
+            border-radius: 50%;
+            background-color: black;
+            margin: 2px;
+        }
+        .value {
+            font-size: 20px;
+            margin-top: 10px;
+        }
+        .challenge {
+            margin-top: 20px;
+        }
+        .range-buttons, .task-count {
+            margin-top: 20px;
+        }
+        .range-buttons button, .task-count button {
+            margin: 5px;
+            padding: 8px 16px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .task-box {
+            display: none;
+            background-color: #dbeeff;
+            border: 2px solid #3399cc;
+            padding: 10px;
+            margin: 20px auto;
+            width: fit-content;
+            border-radius: 8px;
+            transition: background-color 0.5s;
+        }
+        .task-box.correct {
+            background-color: #ccf5cc;
+            border-color: #44aa44;
+        }
+        .task-count button.active, .range-buttons button.active {
+            background-color: #3399cc;
+            color: white;
+        }
+        #check-button {
+            display: none;
+            margin-top: 40px;
+            background-color: #dbeeff;
+            border: 2px solid #3399cc;
+            font-size: 20px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        #feedback {
+            margin-top: 15px;
+            font-size: 18px;
+        }
+        #summary {
+            margin-top: 30px;
+            font-size: 18px;
+            text-align: left;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dvojiška števila</h1>
+     <p>Ta program ti bo pomagal pri utrjevanju poznavanja dvojiških števil.</p>
+
+    <div class="challenge">
+        <div class="task-count">
+            <p>Izberi število nalog:</p>
+            <button onclick="setTaskCount(5, event)">5</button>
+            <button onclick="setTaskCount(10, event)">10</button>
+            <button onclick="setTaskCount(15, event)">15</button>
+            <button onclick="setTaskCount(20, event)">20</button>
+        </div>
+
+        <div class="range-buttons">
+            <p>Izberi obseg:</p>
+            <button onclick="setRange(15, event)">1 – 15</button>
+            <button onclick="setRange(31, event)">1 – 31</button>
+            <button onclick="setRange(63, event)">1 – 63</button>
+            <button onclick="setRange(127, event)">1 – 127</button>
+            <button onclick="setRange(255, event)">1 – 255</button>
+        </div>
+
+        <div class="task-box" id="task-box">
+            <h2>Naloga <span id="current-task"></span>: Prikaži število <span id="target-value"></span></h2>
+        </div>
+    </div>
+
+    <div class="container" id="cards"></div>
+
+    <button onclick="checkAnswer()" id="check-button">Preveri</button>
+    <p id="feedback"></p>
+    <p id="binary-output"></p>
+    <div id="summary"></div>
+
+    <script>
+        let values = [128, 64, 32, 16, 8, 4, 2, 1];
+        const allValues = [128, 64, 32, 16, 8, 4, 2, 1];
+        const cardLayouts = {
+            128: { columns: 8, size: 6, gapClass: 'spacing-small' },
+            64: { columns: 8, size: 8, gapClass: 'spacing-large' },
+            32: { columns: 4, size: 10, gapClass: 'spacing-large' },
+            16: { columns: 4, size: 12, gapClass: 'spacing-large' },
+            8: { columns: 2, size: 16, gapClass: 'spacing-large' },
+            4: { columns: 2, size: 20, gapClass: 'spacing-large' },
+            2: { columns: 1, size: 24, gapClass: 'spacing-large' },
+            1: { columns: 1, size: 28, gapClass: 'spacing-large' }
+        };
+
+        const cardsContainer = document.getElementById("cards");
+        const targetValueDisplay = document.getElementById("target-value");
+        const feedback = document.getElementById("feedback");
+        const checkButton = document.getElementById("check-button");
+        const taskBox = document.getElementById("task-box");
+        const binaryOutput = document.getElementById("binary-output");
+        const summary = document.getElementById("summary");
+
+        let activeValues = [];
+        let targetValue = 0;
+        let attempts = 0;
+        let currentMaxValue = 0;
+        let totalTasks = 0;
+        let completedTasks = 0;
+        let results = [];
+
+        function setTaskCount(count, event) {
+            totalTasks = count;
+            completedTasks = 0;
+            results = [];
+            summary.innerHTML = "";
+            document.querySelectorAll('.task-count button').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        function setRange(maxValue, event) {
+            if (totalTasks === 0) {
+                alert("Najprej izberi število nalog.");
+                return;
+            }
+            document.querySelectorAll('.range-buttons button').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            startChallenge(maxValue);
+        }
+
+        function toggleCard(index) {
+            activeValues[index] = activeValues[index] === 0 ? 1 : 0;
+            document.getElementById(`card-${index}`).classList.toggle("active");
+        }
+
+        function resetCards() {
+            activeValues.fill(0);
+            document.querySelectorAll(".card").forEach(card => card.classList.remove("active"));
+            feedback.textContent = "";
+            binaryOutput.textContent = "";
+            attempts = 0;
+        }
+
+        function checkAnswer() {
+            let current = activeValues.reduce((sum, val, index) => sum + val * values[index], 0);
+            attempts++;
+            let binaryString = activeValues.join("");
+            binaryOutput.textContent = `🧼 Binarni zapis: ${binaryString} (${current})`;
+
+            let countdown = 2;
+            let interval;
+            const isLastTask = completedTasks + 1 >= totalTasks;
+
+            if (current === targetValue) {
+                feedback.textContent = isLastTask ? "✅ Odlično! Pravilen odgovor." : `✅ Odlično! Pravilen odgovor. Nova naloga čez ${countdown}...`;
+                feedback.style.color = "green";
+                taskBox.classList.add("correct");
+                results.push({target: targetValue, user: current, correct: true, binary: binaryString});
+                interval = setInterval(() => {
+                    if (!isLastTask) feedback.textContent = `✅ Odlično! Pravilen odgovor. Nova naloga čez ${countdown}...`;
+                    countdown--;
+                    if (countdown < 0) {
+                        clearInterval(interval);
+                        taskBox.classList.remove("correct");
+                        nextTask();
+                    }
+                }, 1000);
+            } else {
+                feedback.textContent = isLastTask ? "❌ Napačno." : `❌ Napačno. Nova naloga čez ${countdown}...`;
+                feedback.style.color = "red";
+                results.push({target: targetValue, user: current, correct: false, binary: binaryString});
+                interval = setInterval(() => {
+                    if (!isLastTask) feedback.textContent = `❌ Napačno. Nova naloga čez ${countdown}...`;
+                    countdown--;
+                    if (countdown < 0) {
+                        clearInterval(interval);
+                        nextTask();
+                    }
+                }, 1000);
+            }
+        }
+
+        function nextTask() {
+            completedTasks++;
+            if (completedTasks >= totalTasks) {
+                showSummary();
+            } else {
+                startChallenge(currentMaxValue);
+            }
+        }
+
+        function startChallenge(maxValue) {
+            currentMaxValue = maxValue;
+            values = allValues.filter(v => v <= maxValue).sort((a,b) => b-a);
+            activeValues = new Array(values.length).fill(0);
+            targetValue = Math.floor(Math.random() * maxValue) + 1;
+            targetValueDisplay.textContent = targetValue;
+            document.getElementById("current-task").textContent = completedTasks + 1;
+            taskBox.style.display = "block";
+            checkButton.style.display = "inline-block";
+            feedback.textContent = "";
+            binaryOutput.textContent = "";
+            attempts = 0;
+            renderCards();
+        }
+
+        function showSummary() {
+            let html = '<h3>Povzetek nalog</h3>';
+            html += '<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; text-align: center;">';
+            html += '<tr><th>Št. naloge</th><th>Tvoj odgovor</th><th>Rezultat</th><th>Pravilni odgovor</th></tr>';
+            results.forEach((r, i) => {
+                html += `<tr>`;
+                html += `<td>${i + 1}</td>`;
+                html += `<td>${r.user} (${r.binary})</td>`;
+                html += `<td>${r.correct ? '✅' : '❌'}</td>`;
+                html += `<td>${r.target} (${r.target.toString(2).padStart(values.length, '0')})</td>`;
+                html += `</tr>`;
+            });
+            html += '</table>';
+            const correctCount = results.filter(r => r.correct).length;
+            html += `<p style='margin-top: 15px;'><strong>Pravilno si odgovoril na ${correctCount} od ${totalTasks} nalog.</strong></p>`;
+            summary.innerHTML = html;
+        }
+
+        function renderCards() {
+            cardsContainer.innerHTML = "";
+            values.forEach((value, index) => {
+                const layout = cardLayouts[value];
+
+                let card = document.createElement("div");
+                card.classList.add("card");
+                card.id = `card-${index}`;
+                card.onclick = () => toggleCard(index);
+
+                let dotsContainer = document.createElement("div");
+                dotsContainer.classList.add("dots", layout.gapClass);
+                dotsContainer.style.gridTemplateColumns = `repeat(${layout.columns}, auto)`;
+
+                for (let i = 0; i < value; i++) {
+                    let dot = document.createElement("div");
+                    dot.classList.add("dot");
+                    dot.style.width = `${layout.size}px`;
+                    dot.style.height = `${layout.size}px`;
+                    dotsContainer.appendChild(dot);
+                }
+
+                let valueText = document.createElement("div");
+                valueText.classList.add("value");
+                valueText.textContent = value;
+
+                card.appendChild(dotsContainer);
+                card.appendChild(valueText);
+                cardsContainer.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>
